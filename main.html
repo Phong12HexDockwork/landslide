@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Giám sát & Phân tích Sạt lở Lâm Đồng (2015-2025)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Plotly.js (For Timelapse Heatmap) -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <!-- Leaflet CSS & JS (For Real Map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fafaf9; /* Stone-50 */
+            color: #292524; /* Stone-800 */
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #e7e5e4; }
+        ::-webkit-scrollbar-thumb { background: #a8a29e; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #78716c; }
+
+        /* Chart Container Utilities */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        /* Specific heights for responsiveness */
+        .h-map-lg { height: 600px; max-height: 70vh; z-index: 10; } /* Z-index important for Leaflet */
+        .h-map-sm { height: 400px; max-height: 50vh; }
+        .h-chart-std { height: 350px; max-height: 400px; }
+        .h-chart-sm { height: 300px; max-height: 350px; }
+
+        @media (max-width: 768px) {
+            .h-map-lg { height: 450px; }
+            .h-chart-std { height: 300px; }
+            .h-chart-sm { height: 250px; }
+        }
+
+        /* Data Grid Styling */
+        .data-row:hover { background-color: #f5f5f4; cursor: pointer; }
+        
+        /* Leaflet Popup Customization */
+        .leaflet-popup-content-wrapper { border-radius: 8px; font-family: 'Inter', sans-serif; }
+        .leaflet-popup-content h3 { font-weight: 700; color: #292524; margin-bottom: 4px; }
+        .leaflet-popup-content p { margin: 0; color: #57534e; font-size: 13px; }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Header Section -->
+    <header class="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-red-600 text-white p-2 rounded-lg">
+                        <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-stone-900 leading-tight">Dữ Liệu Sạt Lở Lâm Đồng</h1>
+                        <p class="text-xs text-stone-500 font-medium">Báo cáo Tổng hợp & Phân tích (2015 - 2025)</p>
+                    </div>
+                </div>
+                
+                <div class="flex flex-wrap gap-3 items-center">
+                    <div class="relative">
+                        <select id="yearFilter" class="appearance-none bg-stone-100 border border-stone-300 text-stone-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-stone-500 text-sm">
+                            <option value="all">Tất cả các năm</option>
+                            <option value="2025">2025 (Dự báo)</option>
+                            <option value="2024">2024</option>
+                            <option value="2023">2023</option>
+                            <option value="2022">2022</option>
+                            <option value="2021">2021</option>
+                            <option value="older">Trước 2021</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-stone-700">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+
+                    <div class="relative">
+                        <select id="districtFilter" class="appearance-none bg-stone-100 border border-stone-300 text-stone-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-stone-500 text-sm">
+                            <option value="all">Toàn Tỉnh</option>
+                            <option value="Đà Lạt">Đà Lạt</option>
+                            <option value="Bảo Lộc">Bảo Lộc</option>
+                            <option value="Lạc Dương">Lạc Dương</option>
+                            <option value="Di Linh">Di Linh</option>
+                            <option value="Đam Rông">Đam Rông</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-stone-700">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                    
+                    <button id="resetBtn" class="bg-stone-800 hover:bg-stone-700 text-white font-medium py-2 px-4 rounded text-sm transition duration-150 ease-in-out shadow-sm">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> Làm mới
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full">
+
+        <!-- Introduction -->
+        <section>
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r shadow-sm">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fa-solid fa-circle-info text-amber-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-amber-800">Cập Nhật Mới: Bản Đồ Địa Lý Thực Tế</h3>
+                        <div class="mt-2 text-sm text-amber-700">
+                            <p>
+                                Hệ thống đã tích hợp bản đồ địa lý chi tiết. Các điểm tròn trên bản đồ đại diện cho các vụ sạt lở.
+                                <strong>Màu Đỏ:</strong> Nguy cơ rất cao | <strong>Màu Cam:</strong> Cao | <strong>Màu Vàng:</strong> Trung bình | <strong>Màu Xanh:</strong> Thấp.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- KPI Dashboard -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- KPI 1 -->
+            <div class="bg-white p-5 rounded-lg shadow border border-stone-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-stone-500 uppercase tracking-wider">Tổng số điểm sạt lở</p>
+                    <p id="kpi-total" class="text-3xl font-bold text-stone-800 mt-1">--</p>
+                </div>
+                <div class="p-3 bg-blue-50 rounded-full text-blue-600">
+                    <i class="fa-solid fa-map-location-dot text-xl"></i>
+                </div>
+            </div>
+            <!-- KPI 2 -->
+            <div class="bg-white p-5 rounded-lg shadow border border-stone-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-stone-500 uppercase tracking-wider">Nguy cơ Cao/Rất cao</p>
+                    <p id="kpi-high-risk" class="text-3xl font-bold text-red-600 mt-1">--</p>
+                </div>
+                <div class="p-3 bg-red-50 rounded-full text-red-600">
+                    <i class="fa-solid fa-radiation text-xl"></i>
+                </div>
+            </div>
+            <!-- KPI 3 -->
+            <div class="bg-white p-5 rounded-lg shadow border border-stone-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-stone-500 uppercase tracking-wider">Năm đỉnh điểm</p>
+                    <p id="kpi-peak-year" class="text-3xl font-bold text-amber-600 mt-1">--</p>
+                </div>
+                <div class="p-3 bg-amber-50 rounded-full text-amber-600">
+                    <i class="fa-solid fa-chart-line text-xl"></i>
+                </div>
+            </div>
+             <!-- KPI 4 -->
+             <div class="bg-white p-5 rounded-lg shadow border border-stone-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-stone-500 uppercase tracking-wider">Điểm nóng (Hotspot)</p>
+                    <p id="kpi-hotspot" class="text-lg font-bold text-stone-800 mt-1">--</p>
+                </div>
+                <div class="p-3 bg-emerald-50 rounded-full text-emerald-600">
+                    <i class="fa-solid fa-city text-xl"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- REAL GEO MAP SECTION (New Feature) -->
+        <section class="space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xl font-bold text-stone-800">
+                    <i class="fa-solid fa-map mr-2 text-stone-500"></i> Bản Đồ Vị Trí Sạt Lở (Địa Lý Thực Tế)
+                </h2>
+                <div class="text-xs text-stone-500">Dữ liệu bản đồ: OpenStreetMap</div>
+            </div>
+            <p class="text-sm text-stone-600">
+                Quan sát trực quan vị trí các điểm sạt lở trên nền bản đồ thực tế. Nhấp vào các điểm tròn để xem chi tiết vụ việc.
+            </p>
+            
+            <!-- Map Container (Leaflet) -->
+            <div class="w-full bg-white rounded-lg shadow border border-stone-200 overflow-hidden">
+                <div id="geoMap" class="w-full h-map-lg z-0"></div>
+            </div>
+        </section>
+
+        <!-- Analysis Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- District Breakdown -->
+            <div class="space-y-2">
+                <h2 class="text-lg font-bold text-stone-800">
+                    <i class="fa-solid fa-building mr-2 text-stone-500"></i> Theo Khu Vực
+                </h2>
+                <div class="chart-container h-chart-sm">
+                    <canvas id="districtChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Causes Breakdown -->
+            <div class="space-y-2">
+                <h2 class="text-lg font-bold text-stone-800">
+                    <i class="fa-solid fa-magnifying-glass-chart mr-2 text-stone-500"></i> Theo Nguyên Nhân
+                </h2>
+                <div class="chart-container h-chart-sm">
+                    <canvas id="causeChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trend Chart -->
+        <section class="space-y-4">
+            <h2 class="text-lg font-bold text-stone-800">
+                <i class="fa-solid fa-clock-rotate-left mr-2 text-stone-500"></i> Diễn Biến (2015 - 2025)
+            </h2>
+            <div class="chart-container h-chart-std w-full">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Timelapse Section (Plotly) -->
+        <section class="bg-white p-6 rounded-lg shadow border border-stone-200 space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-stone-800">
+                        <i class="fa-solid fa-film mr-2 text-stone-500"></i> Mô Phỏng Nhiệt & Diễn Tiến
+                    </h2>
+                    <p class="text-sm text-stone-600">
+                        Chế độ xem tua nhanh thời gian (Time-lapse) để nhận diện xu hướng lan rộng.
+                    </p>
+                </div>
+                <div class="flex items-center space-x-2 bg-stone-100 p-2 rounded-lg">
+                    <button id="btnPlay" class="w-10 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-full transition shadow">
+                        <i class="fa-solid fa-play ml-1"></i>
+                    </button>
+                    <button id="btnPause" class="hidden w-10 h-10 flex items-center justify-center bg-stone-600 hover:bg-stone-700 text-white rounded-full transition shadow">
+                        <i class="fa-solid fa-pause"></i>
+                    </button>
+                    <div class="flex flex-col px-4 w-48 md:w-64">
+                        <div class="flex justify-between text-xs font-bold text-stone-500 mb-1">
+                            <span>2015</span>
+                            <span id="timelapse-display" class="text-blue-700 text-base">2015</span>
+                            <span>2025</span>
+                        </div>
+                        <input type="range" id="timelapseSlider" min="2015" max="2025" step="1" value="2015" class="w-full h-2 bg-stone-300 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container h-map-sm border border-stone-100">
+                <div id="timelapseMap" class="w-full h-full"></div>
+            </div>
+        </section>
+
+        <!-- Detailed Data Grid -->
+        <section class="space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-center">
+                <h2 class="text-lg font-bold text-stone-800">
+                    <i class="fa-solid fa-table-list mr-2 text-stone-500"></i> Dữ Liệu Chi Tiết
+                </h2>
+                <div class="mt-2 sm:mt-0 relative">
+                    <input type="text" id="tableSearch" placeholder="Tìm kiếm..." class="pl-8 pr-4 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:border-stone-500 w-64">
+                    <i class="fa-solid fa-search absolute left-3 top-3 text-stone-400 text-xs"></i>
+                </div>
+            </div>
+            
+            <div class="bg-white shadow overflow-hidden border-b border-stone-200 rounded-lg max-h-96 overflow-y-auto">
+                <table class="min-w-full divide-y divide-stone-200">
+                    <thead class="bg-stone-50 sticky top-0 z-10">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Năm</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Khu Vực</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Mức Độ</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Nguyên Nhân</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Thiệt Hại</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody" class="bg-white divide-y divide-stone-200 text-sm">
+                        <!-- Rows populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-2 text-xs text-stone-500" id="tableCount"></div>
+        </section>
+
+    </main>
+
+    <!-- Application Logic -->
+    <script>
+        /**
+         * REALISTIC DATA GENERATION
+         * Lat/Lon are now centered on real districts in Lam Dong.
+         */
+        const districtCoords = {
+            'Đà Lạt': { lat: 11.9404, lon: 108.4583 },
+            'Bảo Lộc': { lat: 11.5473, lon: 107.8061 },
+            'Lạc Dương': { lat: 12.0500, lon: 108.5000 },
+            'Di Linh': { lat: 11.6083, lon: 108.0750 },
+            'Đam Rông': { lat: 11.9833, lon: 108.1167 },
+            'Đơn Dương': { lat: 11.8333, lon: 108.5500 },
+            'Đức Trọng': { lat: 11.7167, lon: 108.3667 },
+            'Bảo Lâm': { lat: 11.6667, lon: 107.7000 }
+        };
+
+        const causes = ['Mưa kéo dài', 'Địa chất yếu', 'Xây dựng/San lấp', 'Mất thảm thực vật', 'Thủy điện/Hồ chứa'];
+        const risks = ['Thấp', 'Trung bình', 'Cao', 'Rất cao'];
+
+        const generateData = () => {
+            const data = [];
+
+            // 1. High Profile Real Events (Simulated Coords close to reality)
+            data.push({
+                id: 1, year: 2023, district: 'Đà Lạt', lat: 11.935, lon: 108.445, risk: 'Rất cao',
+                cause: 'Xây dựng/San lấp', desc: 'Sạt lở taluy đường Hoàng Hoa Thám.'
+            });
+            data.push({
+                id: 2, year: 2023, district: 'Bảo Lộc', lat: 11.450, lon: 107.620, risk: 'Rất cao', // Pass Bao Loc
+                cause: 'Mưa kéo dài', desc: 'Sạt lở đèo Bảo Lộc.'
+            });
+
+            const districts = Object.keys(districtCoords);
+
+            // 2. Random Generation
+            for (let i = 0; i < 200; i++) {
+                const district = districts[Math.floor(Math.random() * districts.length)];
+                const base = districtCoords[district];
+                const year = Math.floor(Math.random() * (2025 - 2015 + 1)) + 2015;
+                
+                // Spread points around district center (approx 5-10km radius)
+                // 0.01 deg lat approx 1.1km
+                let latOffset = (Math.random() - 0.5) * 0.1; 
+                let lonOffset = (Math.random() - 0.5) * 0.1;
+
+                const risk = risks[Math.floor(Math.random() * risks.length)];
+                let cause = causes[Math.floor(Math.random() * causes.length)];
+                if (risk === 'Rất cao' && Math.random() > 0.6) cause = 'Mưa kéo dài';
+
+                data.push({
+                    id: i + 3,
+                    year: year,
+                    district: district,
+                    lat: base.lat + latOffset,
+                    lon: base.lon + lonOffset,
+                    risk: risk,
+                    cause: cause,
+                    desc: `Sạt lở cục bộ ${district}, khu vực đồi núi.`
+                });
+            }
+            return data.sort((a, b) => b.year - a.year);
+        };
+
+        const allData = generateData();
+
+        // --- GLOBAL STATE ---
+        let currentState = {
+            data: allData,
+            filterYear: 'all',
+            filterDistrict: 'all',
+            timelapseYear: 2015,
+            isPlaying: false,
+            animationInterval: null
+        };
+
+        // --- DOM ELEMENTS (Safe selection) ---
+        const els = {
+            kpiTotal: document.getElementById('kpi-total'),
+            kpiHighRisk: document.getElementById('kpi-high-risk'),
+            kpiPeakYear: document.getElementById('kpi-peak-year'),
+            kpiHotspot: document.getElementById('kpi-hotspot'),
+            
+            yearFilter: document.getElementById('yearFilter'),
+            districtFilter: document.getElementById('districtFilter'),
+            resetBtn: document.getElementById('resetBtn'),
+            
+            dataTableBody: document.getElementById('dataTableBody'),
+            tableCount: document.getElementById('tableCount'),
+            tableSearch: document.getElementById('tableSearch'),
+            
+            // Map Containers
+            geoMapDiv: document.getElementById('geoMap'),
+            timelapseMapDiv: document.getElementById('timelapseMap'),
+            
+            // Controls
+            btnPlay: document.getElementById('btnPlay'),
+            btnPause: document.getElementById('btnPause'),
+            slider: document.getElementById('timelapseSlider'),
+            yearDisplay: document.getElementById('timelapse-display'),
+        };
+
+        // --- LEAFLET MAP SETUP ---
+        // Initialize Map centered on Lam Dong
+        let leafMap = L.map('geoMap').setView([11.85, 108.20], 9);
+        
+        // Add OpenStreetMap Tile Layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 18,
+        }).addTo(leafMap);
+
+        // Layer Group for Markers
+        let markerLayer = L.layerGroup().addTo(leafMap);
+
+        // Helper: Risk Colors
+        const getRiskColor = (risk) => {
+            switch(risk) {
+                case 'Rất cao': return '#dc2626'; // Red
+                case 'Cao': return '#f97316'; // Orange
+                case 'Trung bình': return '#eab308'; // Yellow
+                default: return '#10b981'; // Green
+            }
+        };
+
+        // --- CHART INSTANCES ---
+        let chartInstances = { district: null, trend: null, cause: null };
+
+        // --- CORE FUNCTIONS ---
+
+        function processData() {
+            let filtered = allData.filter(item => {
+                const yearMatch = currentState.filterYear === 'all' 
+                    ? true 
+                    : currentState.filterYear === 'older' ? item.year < 2021 : item.year == currentState.filterYear;
+                
+                const districtMatch = currentState.filterDistrict === 'all' 
+                    ? true 
+                    : item.district === currentState.filterDistrict;
+                
+                const searchText = els.tableSearch.value.toLowerCase();
+                const textMatch = searchText === '' 
+                    ? true 
+                    : (item.district.toLowerCase().includes(searchText) || item.desc.toLowerCase().includes(searchText));
+
+                return yearMatch && districtMatch && textMatch;
+            });
+            return filtered;
+        }
+
+        function updateKPIs(data) {
+            if(els.kpiTotal) els.kpiTotal.textContent = data.length;
+            
+            const highRiskCount = data.filter(d => d.risk === 'Cao' || d.risk === 'Rất cao').length;
+            if(els.kpiHighRisk) els.kpiHighRisk.textContent = highRiskCount;
+
+            const yearCounts = {};
+            data.forEach(d => { yearCounts[d.year] = (yearCounts[d.year] || 0) + 1; });
+            const peakYear = Object.keys(yearCounts).length > 0 
+                ? Object.keys(yearCounts).reduce((a, b) => yearCounts[a] > yearCounts[b] ? a : b) 
+                : 'N/A';
+            if(els.kpiPeakYear) els.kpiPeakYear.textContent = peakYear;
+
+            const distCounts = {};
+            data.forEach(d => { distCounts[d.district] = (distCounts[d.district] || 0) + 1; });
+            const hotspot = Object.keys(distCounts).length > 0
+                ? Object.keys(distCounts).reduce((a, b) => distCounts[a] > distCounts[b] ? a : b)
+                : 'N/A';
+            if(els.kpiHotspot) els.kpiHotspot.textContent = hotspot;
+        }
+
+        // --- RENDER LEAFLET MAP ---
+        function renderGeoMap(data) {
+            markerLayer.clearLayers(); // Clear old markers
+
+            data.forEach(d => {
+                // Create circle marker
+                const circle = L.circleMarker([d.lat, d.lon], {
+                    color: 'white',
+                    weight: 1,
+                    fillColor: getRiskColor(d.risk),
+                    fillOpacity: 0.8,
+                    radius: d.risk === 'Rất cao' ? 10 : 6
+                });
+
+                // Popup content
+                const popupContent = `
+                    <div>
+                        <h3>${d.district} (${d.year})</h3>
+                        <p><strong>Mức độ:</strong> <span style="color:${getRiskColor(d.risk)}">${d.risk}</span></p>
+                        <p><strong>Nguyên nhân:</strong> ${d.cause}</p>
+                        <p><em>${d.desc}</em></p>
+                    </div>
+                `;
+
+                circle.bindPopup(popupContent);
+                markerLayer.addLayer(circle);
+            });
+            
+            // Auto fit bounds if data exists, else default view
+            if(data.length > 0) {
+                 // Creating a latLngBounds object from data
+                 const group = new L.featureGroup(markerLayer.getLayers());
+                 leafMap.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+
+        // --- RENDER TIMELAPSE (PLOTLY HEATMAP) ---
+        function renderTimelapseMap() {
+            const currentYear = parseInt(currentState.timelapseYear);
+            const yearData = allData.filter(d => d.year === currentYear);
+
+            const layout = {
+                title: { text: `Mật độ Sạt lở Năm ${currentYear}`, font: { size: 14 } },
+                hovermode: 'closest',
+                dragmode: 'pan',
+                showlegend: false,
+                margin: { l: 30, r: 20, t: 30, b: 30 },
+                xaxis: { showgrid: false, zeroline: false, title: 'Kinh độ', range: [107.4, 109.0] }, 
+                yaxis: { showgrid: false, zeroline: false, title: 'Vĩ độ', scaleanchor: "x", scaleratio: 1, range: [11.2, 12.3] },
+                plot_bgcolor: '#fff7ed', 
+            };
+            const config = { responsive: true, displayModeBar: false };
+
+            // Heatmap density trace
+            const trace = {
+                x: yearData.map(d => d.lon),
+                y: yearData.map(d => d.lat),
+                type: 'histogram2dcontour',
+                colorscale: 'Hot',
+                reversescale: true,
+                ncontours: 15,
+                showscale: false
+            };
+            
+            // Add Scatter points on top for clarity
+            const tracePoints = {
+                 x: yearData.map(d => d.lon),
+                 y: yearData.map(d => d.lat),
+                 mode: 'markers',
+                 type: 'scatter',
+                 marker: { color: 'black', size: 4, opacity: 0.5 }
+            };
+
+            const data = yearData.length > 0 ? [trace, tracePoints] : [];
+
+            if (yearData.length === 0) {
+                 layout.annotations = [{
+                    text: "Không có dữ liệu",
+                    xref: "paper", yref: "paper",
+                    showarrow: false, font: { size: 16, color: "gray" }
+                }];
+            }
+
+            Plotly.react(els.timelapseMapDiv, data, layout, config);
+        }
+
+        // --- ANIMATION CONTROLS ---
+        function togglePlay() {
+            if (currentState.isPlaying) {
+                currentState.isPlaying = false;
+                clearInterval(currentState.animationInterval);
+                els.btnPlay.classList.remove('hidden');
+                els.btnPause.classList.add('hidden');
+            } else {
+                currentState.isPlaying = true;
+                els.btnPlay.classList.add('hidden');
+                els.btnPause.classList.remove('hidden');
+                
+                currentState.animationInterval = setInterval(() => {
+                    let nextYear = parseInt(currentState.timelapseYear) + 1;
+                    if (nextYear > 2025) nextYear = 2015;
+                    currentState.timelapseYear = nextYear;
+                    els.slider.value = nextYear;
+                    els.yearDisplay.textContent = nextYear;
+                    renderTimelapseMap();
+                }, 1200); 
+            }
+        }
+        
+        if(els.btnPlay) els.btnPlay.addEventListener('click', togglePlay);
+        if(els.btnPause) els.btnPause.addEventListener('click', togglePlay);
+        if(els.slider) els.slider.addEventListener('input', (e) => {
+            if(currentState.isPlaying) togglePlay();
+            currentState.timelapseYear = parseInt(e.target.value);
+            els.yearDisplay.textContent = currentState.timelapseYear;
+            renderTimelapseMap();
+        });
+
+        // --- STANDARD CHARTS ---
+        function renderCharts(data) {
+            // District Bar
+            const distCounts = {};
+            data.forEach(d => distCounts[d.district] = (distCounts[d.district] || 0) + 1);
+            const sortedDistricts = Object.entries(distCounts).sort((a,b) => b[1] - a[1]);
+            
+            const ctxDist = document.getElementById('districtChart').getContext('2d');
+            if(chartInstances.district) chartInstances.district.destroy();
+            
+            chartInstances.district = new Chart(ctxDist, {
+                type: 'bar',
+                data: {
+                    labels: sortedDistricts.map(i => i[0]),
+                    datasets: [{
+                        label: 'Số vụ sạt lở',
+                        data: sortedDistricts.map(i => i[1]),
+                        backgroundColor: '#78716c', 
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { display: false } } },
+                    onClick: (e, activeEls) => {
+                        if(activeEls.length > 0) {
+                            const index = activeEls[0].index;
+                            const label = sortedDistricts[index][0];
+                            els.districtFilter.value = label;
+                            els.districtFilter.dispatchEvent(new Event('change'));
+                        }
+                    }
+                }
+            });
+
+            // Trend Line
+            const yearCounts = {};
+            for(let y=2015; y<=2025; y++) yearCounts[y] = 0;
+            data.forEach(d => yearCounts[d.year] = (yearCounts[d.year] || 0) + 1);
+
+            const ctxTrend = document.getElementById('trendChart').getContext('2d');
+            if(chartInstances.trend) chartInstances.trend.destroy();
+            chartInstances.trend = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: Object.keys(yearCounts),
+                    datasets: [{
+                        label: 'Số vụ việc',
+                        data: Object.values(yearCounts),
+                        borderColor: '#f59e0b', 
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+
+            // Cause Doughnut
+            const causeCounts = {};
+            data.forEach(d => causeCounts[d.cause] = (causeCounts[d.cause] || 0) + 1);
+            const ctxCause = document.getElementById('causeChart').getContext('2d');
+            if(chartInstances.cause) chartInstances.cause.destroy();
+            chartInstances.cause = new Chart(ctxCause, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(causeCounts),
+                    datasets: [{
+                        data: Object.values(causeCounts),
+                        backgroundColor: ['#3b82f6', '#ef4444', '#eab308', '#22c55e', '#a855f7'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } } }
+            });
+        }
+
+        // --- TABLE ---
+        function renderTable(data) {
+            if(!els.dataTableBody) return;
+            els.dataTableBody.innerHTML = '';
+            els.tableCount.textContent = `Hiển thị ${data.length} kết quả`;
+
+            const displayData = data.slice(0, 50); // Limit DOM nodes
+
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'data-row transition duration-150 ease-in-out';
+                let riskClass = 'text-stone-600';
+                if(row.risk === 'Cao') riskClass = 'text-orange-600 font-bold';
+                if(row.risk === 'Rất cao') riskClass = 'text-red-600 font-bold';
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-stone-900">${row.year}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-stone-700 font-medium">${row.district}</td>
+                    <td class="px-6 py-4 whitespace-nowrap ${riskClass}">${row.risk}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-stone-500">${row.cause}</td>
+                    <td class="px-6 py-4 text-stone-500 text-xs max-w-xs truncate" title="${row.desc}">${row.desc}</td>
+                `;
+                
+                tr.addEventListener('click', () => {
+                   document.querySelectorAll('.data-row').forEach(r => r.classList.remove('bg-yellow-50'));
+                   tr.classList.add('bg-yellow-50');
+                   els.geoMapDiv.scrollIntoView({ behavior: 'smooth' });
+                   // Find marker and open popup (advanced feature, skipped for simplicity, but map will center)
+                   leafMap.setView([row.lat, row.lon], 13);
+                });
+                els.dataTableBody.appendChild(tr);
+            });
+        }
+
+        // --- MASTER UPDATE ---
+        function updateAll() {
+            const filteredData = processData();
+            updateKPIs(filteredData);
+            renderGeoMap(filteredData); // Leaflet
+            renderCharts(filteredData);
+            renderTable(filteredData);
+            renderTimelapseMap(); // Plotly (Initial Frame)
+        }
+
+        // --- LISTENERS ---
+        if(els.yearFilter) els.yearFilter.addEventListener('change', (e) => {
+            currentState.filterYear = e.target.value;
+            updateAll();
+        });
+        if(els.districtFilter) els.districtFilter.addEventListener('change', (e) => {
+            currentState.filterDistrict = e.target.value;
+            updateAll();
+        });
+        if(els.tableSearch) els.tableSearch.addEventListener('input', () => {
+            updateAll();
+        });
+        if(els.resetBtn) els.resetBtn.addEventListener('click', () => {
+            els.yearFilter.value = 'all';
+            els.districtFilter.value = 'all';
+            els.tableSearch.value = '';
+            currentState.filterYear = 'all';
+            currentState.filterDistrict = 'all';
+            updateAll();
+        });
+
+        // Init
+        window.addEventListener('resize', () => {
+            if(chartInstances.district) chartInstances.district.resize();
+            if(chartInstances.trend) chartInstances.trend.resize();
+            if(els.timelapseMapDiv) Plotly.Plots.resize(els.timelapseMapDiv);
+            if(leafMap) leafMap.invalidateSize(); // Fix Leaflet grey tiles on resize
+        });
+
+        // Run
+        updateAll();
+
+    </script>
+</body>
+</html>
